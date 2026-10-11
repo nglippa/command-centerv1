@@ -1,0 +1,80 @@
+{
+  "models": [
+    {
+      "family": "qwen",
+      "identifier": "qwen3:14b-q8_0",
+      "provider": "ollama",
+      "endpoint": "http://127.0.0.1:11434/v1",
+      "owner_mode": "shared",
+      "max_tokens": 1024,
+      "context_window": 4096,
+      "timeout_seconds": 600,
+      "load_timeout": 180,
+      "unload_timeout": 30,
+      "health_timeout": 3,
+      "expected_resources": {
+        "weights_bytes": 15895155363,
+        "hardware_unified_memory_gib": 24,
+        "notes": "14B Q8 weights plus context/runtime overhead; exclusive managed residency"
+      },
+      "startup_mechanism": "Native /api/generate preload, /api/ps then tiny /api/chat readiness inference; service remains running",
+      "shutdown_mechanism": "Native /api/generate keep_alive=0, bounded /api/ps residency verification",
+      "health_check": "Exact installed /api/tags name, /api/ps context, completed exact-model inference",
+      "source": "Local Ollama 0.34.4 /api/tags and runtime inspection, 2026-10-11"
+    },
+    {
+      "family": "bonsai",
+      "identifier": "Ternary-Bonsai-2-27B-PQ2_0",
+      "provider": "bonsai",
+      "endpoint": "http://127.0.0.1:8080/v1",
+      "owner_mode": "owned",
+      "reuse_external": false,
+      "max_tokens": 1024,
+      "context_window": 4096,
+      "timeout_seconds": 600,
+      "load_timeout": 180,
+      "unload_timeout": 30,
+      "health_timeout": 3,
+      "model_path": "/Users/nicholaslippa/Projects/Bonsai-demo/models/bonsai2-gguf/27B/Ternary-Bonsai-2-27B-PQ2_0.gguf",
+      "runtime_path": "/Users/nicholaslippa/Projects/Bonsai-demo/bin/mac/llama-server",
+      "runtime_version_contains": "e8fd209c9",
+      "startup_command": [
+        "/Users/nicholaslippa/Projects/Bonsai-demo/bin/mac/llama-server",
+        "-m",
+        "/Users/nicholaslippa/Projects/Bonsai-demo/models/bonsai2-gguf/27B/Ternary-Bonsai-2-27B-PQ2_0.gguf",
+        "--alias",
+        "Ternary-Bonsai-2-27B-PQ2_0",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8080",
+        "-c",
+        "4096",
+        "-ngl",
+        "99",
+        "-np",
+        "1",
+        "-b",
+        "256",
+        "-ub",
+        "128",
+        "--reasoning-budget",
+        "0",
+        "--reasoning-format",
+        "none",
+        "--jinja",
+        "--no-webui",
+        "--log-disable"
+      ],
+      "expected_resources": {
+        "weights_bytes": 7206168928,
+        "hardware_unified_memory_gib": 24,
+        "notes": "27B Prism ternary PQ2_0 plus context/runtime overhead; text only, no mmproj"
+      },
+      "startup_mechanism": "Explicit installed Prism server argv; exact current child PID, birth and executable recorded",
+      "shutdown_mechanism": "Terminate/wait owned child, bounded kill fallback; process exit and endpoint ownership checked",
+      "health_check": "Owned listener PID plus /health, /v1/models exact alias, /props exact model_path, tiny inference",
+      "source": "Installed Bonsai-demo Prism prism-b10772-e8fd209, llama-server 0.2.0-dev build10772 e8fd209c9, 2026-10-11"
+    }
+  ]
+}
