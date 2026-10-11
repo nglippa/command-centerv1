@@ -196,7 +196,7 @@ class Dependencies:
 
     def complete(self, entry: ModelEntry, prompt: str, max_tokens: int) -> tuple[str,str]:
         from models import LocalHTTP, ModelError
-        result,raw=LocalHTTP(entry.endpoint, entry.timeout_seconds).complete(entry.identifier,prompt,max_tokens)
+        result,raw=LocalHTTP(entry.endpoint, entry.timeout_seconds).complete(entry.identifier,prompt,max_tokens,request_options=getattr(self,"contract_request_options",None))
         if json.loads(raw).get("model")!=entry.identifier:
             raise ModelError("Bonsai inference returned a different or missing model identity.",raw)
         return result,raw
@@ -449,6 +449,14 @@ class Manager:
         request={"model":e.identifier,"messages":[{"role":"user","content":task["prompt"]}],"think":False,
                  "stream":False,"keep_alive":600,"options":{"num_ctx":e.context_window,
                  "num_predict":int(task.get("max_tokens",e.max_tokens))}}
+        if task.get("contract_json"):
+            contract=json.loads(task["contract_json"])
+            schema=contract.get("outputSchema")
+            if schema is not None:
+                if not isinstance(schema,dict) or schema.get("type")!="object":
+                    raise LifecycleError("Structured output schema must be an object schema.")
+                request["format"]=schema
+                request["options"].update({"temperature":0,"seed":42})
         value=self.d.native(e,"POST","/api/chat",request,float(task.get("timeout_seconds",e.timeout_seconds)))
         content=value.get("message",{}).get("content") if isinstance(value,dict) else None
         if not isinstance(value,dict) or value.get("done") is not True or value.get("model")!=e.identifier or not isinstance(content,str) or not content:
@@ -561,7 +569,13 @@ class Manager:
         if self.stopping(): raise LifecycleError("Stopped before inference.")
         self.store.transition(self._session,"BUSY")
         self._infer_started=self.d.monotonic()
-        return self.d.complete(replace(e,timeout_seconds=float(task.get("timeout_seconds",e.timeout_seconds))),task["prompt"],int(task.get("max_tokens",e.max_tokens)))
+        prior_options=getattr(self.d,"contract_request_options",None)
+        if task.get("contract_json"):
+            self.d.contract_request_options={"chat_template_kwargs":{"enable_thinking":False},"temperature":0}
+        try:
+            return self.d.complete(replace(e,timeout_seconds=float(task.get("timeout_seconds",e.timeout_seconds))),task["prompt"],int(task.get("max_tokens",e.max_tokens)))
+        finally:
+            self.d.contract_request_options=prior_options
 
     def _cleanup_bonsai(self,e:ModelEntry) -> None:
         if not self._session: return

@@ -181,13 +181,23 @@ class LocalHTTP:
         except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
             raise ModelError("Model discovery returned malformed JSON.") from exc
 
-    def complete(self, model: str, prompt: str, max_tokens: int) -> tuple[str, str]:
+    def complete(self, model: str, prompt: str, max_tokens: int, *, request_options: dict | None = None) -> tuple[str, str]:
+        request_options = request_options or {}
+        if set(request_options)-{"chat_template_kwargs","temperature"}:
+            raise ModelError("Unsupported local request option.")
+        if "chat_template_kwargs" in request_options:
+            kwargs=request_options["chat_template_kwargs"]
+            if not isinstance(kwargs,dict) or set(kwargs)!={"enable_thinking"} or type(kwargs["enable_thinking"]) is not bool:
+                raise ModelError("Invalid local chat template options.")
+        if "temperature" in request_options and (type(request_options["temperature"]) not in (int,float) or not 0<=request_options["temperature"]<=2):
+            raise ModelError("Invalid local temperature.")
         request = json.dumps(
             {
                 "model": model,
                 "max_tokens": max_tokens,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
+                **(request_options or {}),
             },
             ensure_ascii=False,
         ).encode("utf-8")

@@ -65,7 +65,7 @@ class QueueStore:
             """
         )
         existing={row[1] for row in self.db.execute("PRAGMA table_info(tasks)")}
-        for column in ("registry_json", "lifecycle_error", "lifecycle_session_id"):
+        for column in ("registry_json", "lifecycle_error", "lifecycle_session_id", "contract_json"):
             if column not in existing:
                 self.db.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT")
         self.db.execute(
@@ -106,6 +106,7 @@ class QueueStore:
         name: str | None = None,
         task_id: str | None = None,
         registry_json: str | None = None,
+        contract_json: str | None = None,
     ) -> str:
         if not prompt.strip() or len(prompt) > 32_000:
             raise ValueError("Prompt must contain 1 to 32,000 characters.")
@@ -120,8 +121,8 @@ class QueueStore:
         self.db.execute(
             """INSERT INTO tasks
                (id,name,model_family,model_identifier,endpoint,prompt,max_tokens,timeout_seconds,
-                state,created_at,scheduled_at,registry_json)
-               VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?)""",
+                state,created_at,scheduled_at,registry_json,contract_json)
+               VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?)""",
             (
                 task_id,
                 name or None,
@@ -134,6 +135,7 @@ class QueueStore:
                 utc_now(),
                 scheduled_at,
                 registry_json,
+                contract_json,
             ),
         )
         self.db.commit()
