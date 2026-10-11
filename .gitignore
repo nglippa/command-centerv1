@@ -1,3 +1,47 @@
+# Private runtime data and research history
 /.research/
-/tools/research/__pycache__/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.lock
+*.lease
+*.pid
+*.log
+
+# Credentials and environment files
+.env
+.env.*
+*.env
+.npmrc
+credentials.*
+secrets.*
+auth.json
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
+.codex/
+
+# Local model weights
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+/models/
+
+# Generated data, dependencies and caches
 /node_modules/
+/artifacts/
+/generated/
+/tmp/
+.cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.tmp
+*.bak
+.DS_Store
