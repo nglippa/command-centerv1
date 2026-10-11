@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Command Center</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">CC</span><span><strong>Command Center</strong><small>Local model operations</small></span></div>
+      <nav id="primary-nav"></nav>
+      <div class="sidebar-status">
+        <span id="connection-dot" class="status-dot unknown" aria-hidden="true"></span>
+        <span id="connection-label">Connecting</span>
+        <small id="observed-at">No observation yet</small>
+      </div>
+    </aside>
+    <header class="mobile-header">
+      <a class="mobile-brand" href="#/overview">Command Center</a>
+      <label><span class="sr-only">Section</span><select id="mobile-nav" aria-label="Section"></select></label>
+    </header>
+    <main id="content" tabindex="-1">
+      <div class="operator-state"><span id="worker-state">Worker state unverified</span><span id="lease-state">Resources unverified</span></div>
+      <div id="route-header"></div>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <div id="view" aria-busy="true"><p class="muted">Connecting to local Command Center…</p></div>
+    </main>
+  </div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

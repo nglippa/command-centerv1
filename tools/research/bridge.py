@@ -10,6 +10,7 @@ from cli import DEFAULT_CONFIG, DEFAULT_DB, DEFAULT_RESOURCES, worker_active
 from queue_store import QueueStore, utc_now
 from registry import Registry
 from lifecycle import Manager
+from whodunnit_notice import read_notice
 
 LIMIT = 256 * 1024
 
@@ -76,7 +77,7 @@ def handle(request,db,config,resources):
                 current=dict(manager.store.db.execute('SELECT * FROM current WHERE singleton=1').fetchone())
                 session=manager.store.db.execute('SELECT model,state,task_id,updated_at FROM sessions WHERE id=?',(current['session_id'],)).fetchone()
                 last=store.db.execute("SELECT id,state,completed_at,lifecycle_error FROM tasks WHERE state IN ('completed','failed','cancelled') ORDER BY completed_at DESC LIMIT 1").fetchone()
-                return {'version':1,'workerActive':worker_active(db),'queue':store.summary(),'resource':current,'activeSession':dict(session) if session else None,'lastCompletedJob':dict(last) if last else None,'models':[{'family':e.family,'identifier':e.identifier,'provider':e.provider} for e in manager.registry.entries]}
+                return {'notification':read_notice(resources),'version':1,'workerActive':worker_active(db),'queue':store.summary(),'resource':current,'activeSession':dict(session) if session else None,'lastCompletedJob':dict(last) if last else None,'models':[{'family':e.family,'identifier':e.identifier,'provider':e.provider} for e in manager.registry.entries]}
             raise ValueError('Unsupported action')
         finally: manager.store.close()
 

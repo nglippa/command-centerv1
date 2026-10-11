@@ -1,0 +1,80 @@
+{
+  "name": "Synthetic strict structured output",
+  "instruction": "Revise the summary to be natural and concise; preserve project, storage and ordered steps exactly. Return a JSON artifact with only the four permitted fields. No new feature claims.",
+  "source": {
+    "project": "PebbleNotes",
+    "storage": "on-device",
+    "steps": [
+      "Open app",
+      "Write note",
+      "Save note"
+    ]
+  },
+  "original": {
+    "project": "PebbleNotes",
+    "storage": "on-device",
+    "summary": "For the purposes of writing a note, this app provides the opportunity to write and save a note on this device.",
+    "steps": [
+      "Open app",
+      "Write note",
+      "Save note"
+    ]
+  },
+  "format": "json",
+  "requires_semantic_verification": false,
+  "constraints": {
+    "schema": {
+      "type": "object",
+      "required": [
+        "project",
+        "storage",
+        "summary",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "type": "string",
+          "const": "PebbleNotes"
+        },
+        "storage": {
+          "type": "string",
+          "const": "on-device"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 120
+        },
+        "steps": {
+          "type": "array",
+          "const": [
+            "Open app",
+            "Write note",
+            "Save note"
+          ],
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "allowed_numbers": [],
+    "forbidden_content": [
+      "sync",
+      "encrypted",
+      "guarantee"
+    ]
+  },
+  "metrics": {
+    "field": "summary",
+    "avoid_phrases": [
+      "for the purposes of",
+      "provides the opportunity"
+    ],
+    "sentence_max_words": 16,
+    "target_words": 12
+  }
+}

@@ -17,4 +17,7 @@ corepack pnpm research:test
 The worker must be running and the Mac awake to execute scheduled tasks. No models are downloaded. Ollama remains running; only its managed model is unloaded. Bonsai uses the installed Prism-compatible runtime and only current worker-owned server processes are stopped.
 
 See [operating details](tools/research/README.md) and [real hardware verification](LIFECYCLE-VERIFICATION.md).
-# command-centerv1
+
+For bounded Qwen/Bonsai collaboration, see [commands and validation limits](COLLABORATION.md) and [actual experiment results](COLLABORATION-EXPERIMENTS.md).
+
+For the local browser operator interface, run `corepack pnpm research:web` and open **http://127.0.0.1:8787**. See [web startup, operations and verification](COMMAND-CENTER-WEB.md). The existing independent worker remains responsible for execution.

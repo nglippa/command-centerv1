@@ -10,6 +10,11 @@
     "research:test": "python3 -m unittest discover -s tools/research -p 'test_*.py' -v",
     "research:models": "python3 tools/research/cli.py models",
     "research:reconcile": "python3 tools/research/cli.py reconcile",
-    "research:check": "python3 -c \"from pathlib import Path; files=list(Path('tools/research').glob('*.py')); [compile(p.read_text(), str(p), 'exec') for p in files]; print('Python syntax checks passed')\""
+    "research:check": "python3 -c \"from pathlib import Path; files=list(Path('tools/research').glob('*.py')); [compile(p.read_text(), str(p), 'exec') for p in files]; print('Python syntax checks passed')\"",
+    "research:collaborate": "python3 tools/research/cli.py collaborate",
+    "research:compare": "python3 tools/research/cli.py compare",
+    "research:collaborations": "python3 tools/research/cli.py collaborations",
+    "research:cancel-collaboration": "python3 tools/research/cli.py cancel-collaboration",
+    "research:web": "python3 tools/research/web.py"
   }
 }

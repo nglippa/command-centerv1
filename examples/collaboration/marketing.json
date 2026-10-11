@@ -1,0 +1,34 @@
+{
+  "name": "Synthetic marketing script",
+  "instruction": "Naturalize this fictional marketing script. Make it direct and concise. Preserve the protected sentence exactly. Use only source facts; add no claims or features. Return the artifact in the requested JSON envelope.",
+  "source": "Fictional PebbleNotes lets you jot down notes. Notes stay on this device. No other product claims are approved.",
+  "original": "When it comes to the task of jotting down notes, PebbleNotes is here to help you get started with doing that. Notes stay on this device.",
+  "format": "text",
+  "requires_semantic_verification": false,
+  "constraints": {
+    "required_content": [
+      "PebbleNotes"
+    ],
+    "protected_claims": [
+      "Notes stay on this device."
+    ],
+    "forbidden_content": [
+      "sync",
+      "encrypted",
+      "guarantee",
+      "free"
+    ],
+    "allowed_numbers": [],
+    "max_words": 45
+  },
+  "metrics": {
+    "avoid_phrases": [
+      "when it comes to",
+      "the task of",
+      "is here to help",
+      "get started with doing"
+    ],
+    "sentence_max_words": 16,
+    "target_words": 22
+  }
+}

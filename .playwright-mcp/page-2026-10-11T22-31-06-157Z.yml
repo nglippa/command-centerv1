@@ -1,0 +1,120 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "Video Factory LOCAL PRODUCTION STUDIO" [ref=e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e6]:
+        - text: Video Factory
+        - generic [ref=e7]: LOCAL PRODUCTION STUDIO
+    - generic [ref=e8]: Connecting to studio
+    - generic [ref=e11]: 1080 × 1920 / 30 FPS
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - paragraph [ref=e15]: BRIEF → MOTION → REVIEW
+        - heading [level=1] [ref=e16]:
+          - text: Good work deserves
+          - emphasis [ref=e17]: a proper introduction.
+      - paragraph [ref=e18]: Turn approved project content intofinished vertical films. Made on your Mac.Every export waits for your review.
+    - region [ref=e19]:
+      - generic [ref=e20]:
+        - heading "Primary projects campaign" [level=2] [ref=e21]
+        - generic [ref=e22]: Checking durable batch
+      - paragraph
+      - status
+      - paragraph
+      - status
+      - generic [ref=e23]:
+        - button "Pause campaign" [disabled] [ref=e24]
+        - button "Recheck approved sources" [ref=e25] [cursor=pointer]
+        - button "Export review package" [ref=e26] [cursor=pointer]
+        - button "Approve selected proposals" [disabled] [ref=e27]
+      - paragraph [ref=e28]: 50 target slots · 10 per project. Drafts and blocked slots are not completed proposals. Approval sends eligible content to the existing backlog. Editorial scores are model judgments.
+    - region [ref=e29]:
+      - generic [ref=e30]:
+        - heading "Source approval" [level=2] [ref=e31]
+        - button "Refresh candidates" [ref=e32] [cursor=pointer]
+      - paragraph [ref=e33]: New sources wait for your review. Approval includes the displayed claims, proposed copy, audience, CTA and text composition; eligible blocked campaign slots then resume. Source approval leaves every generated proposal awaiting its own review.
+    - generic [ref=e34]:
+      - region [ref=e35]:
+        - generic [ref=e36]:
+          - heading "01 Production brief" [level=2] [ref=e37]
+          - generic [ref=e38]: Loading profiles
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - generic [ref=e42]: Project
+              - combobox "Project" [ref=e43]
+            - generic [ref=e44]:
+              - generic [ref=e45]: Composition
+              - combobox "Composition" [ref=e46]
+          - generic [ref=e47]: Topic / creative direction
+          - textbox "Topic / creative direction" [ref=e48]:
+            - /placeholder: What should this film focus on?
+          - generic [ref=e49]: Approved content
+          - combobox "Approved content" [ref=e50]
+          - group [ref=e51]:
+            - generic "View the approved source text" [ref=e52] [cursor=pointer]
+          - generic [ref=e53]:
+            - paragraph [ref=e54]: Local script generation. Human approval before use.
+            - button "Generate film" [ref=e55] [cursor=pointer]: Generate film ↗
+        - generic "Local model status" [ref=e56]:
+          - generic [ref=e57]:
+            - text: SCRIPT / QWEN
+            - strong [ref=e58]: Checking connection
+          - generic [ref=e59]:
+            - text: EDITORIAL / BONSAI
+            - strong [ref=e60]: Checking connection
+        - region [ref=e61]:
+          - generic [ref=e62]:
+            - heading "02 On the timeline" [level=2] [ref=e63]
+            - generic [ref=e64]: Idle
+          - paragraph [ref=e65]: Your next film starts with a brief.
+          - progressbar "Render progress" [ref=e66]
+          - generic [ref=e67]:
+            - generic [ref=e68]: One job at a time · models unload before rendering
+            - generic [ref=e69]: —
+        - region [ref=e70]:
+          - generic [ref=e71]:
+            - heading "Unattended production" [level=2] [ref=e72]
+            - button "Checking state" [disabled] [ref=e73]
+          - status
+          - paragraph
+          - alert
+          - paragraph [ref=e74]: Pause holds new jobs. Active production finishes; cancel a job to stop it.
+        - region [ref=e75]:
+          - generic [ref=e76]:
+            - heading "Content backlog" [level=2] [ref=e77]
+            - generic [ref=e78]: Content approval → production → video approval
+        - region [ref=e79]:
+          - generic [ref=e80]:
+            - heading "Approved knowledge" [level=2] [ref=e81]
+            - button "Refresh evidence" [ref=e82] [cursor=pointer]
+          - paragraph [ref=e83]: Only reviewed excerpts from explicitly registered local sources may support new proposals.
+        - region [ref=e84]:
+          - generic [ref=e85]:
+            - heading "Idea review" [level=2] [ref=e86]
+            - button "Generate 3 for project" [ref=e87] [cursor=pointer]
+          - paragraph [ref=e88]: Generation queues three source-grounded candidates. Every candidate waits for explicit review.
+        - region [ref=e89]:
+          - generic [ref=e90]:
+            - heading "03 Production queue" [level=2] [ref=e91]
+            - generic [ref=e92]: 0 jobs
+          - table [ref=e94]:
+            - rowgroup [ref=e95]:
+              - row [ref=e96]:
+                - columnheader "Project / topic" [ref=e97]
+                - columnheader "State" [ref=e98]
+                - columnheader "Attempt" [ref=e99]
+            - rowgroup
+          - paragraph [ref=e100]: No productions yet. Create your first film above.
+      - complementary [ref=e101]:
+        - generic [ref=e102]:
+          - heading "04 Review room" [level=2] [ref=e103]
+          - generic [ref=e104]: Awaiting a film
+        - generic [ref=e105]:
+          - generic [ref=e108]: Your finished filmwill appear here.
+          - generic [ref=e109]: VERTICAL / 9:16
+    - generic [ref=e110]:
+      - generic [ref=e111]: PRIVATE BY DESIGN · FILES STAY LOCAL
+      - generic [ref=e112]: Waiting for backend events
+      - generic [ref=e113]: APPLE SILICON / 24 GB

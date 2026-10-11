@@ -1,0 +1,29 @@
+{
+  "name": "Synthetic factual explanation",
+  "instruction": "Improve clarity and naturalness of this fictional workshop explanation. Keep both protected sentences verbatim. Do not invent reasons, guarantees or extra facts. Semantic correctness requires independent verification, which this workflow cannot provide.",
+  "source": "Approved synthetic facts: The workshop lasts two hours. Admission includes a printed guide. Attendees use the guide during the workshop.",
+  "original": "For the purposes of helping attendees understand what is involved, the workshop provides the opportunity to use a guide during the event. The workshop lasts two hours. Admission includes a printed guide.",
+  "format": "text",
+  "requires_semantic_verification": true,
+  "constraints": {
+    "protected_claims": [
+      "The workshop lasts two hours.",
+      "Admission includes a printed guide."
+    ],
+    "forbidden_content": [
+      "certificate",
+      "guarantee",
+      "free"
+    ],
+    "allowed_numbers": [],
+    "max_words": 50
+  },
+  "metrics": {
+    "avoid_phrases": [
+      "for the purposes of",
+      "provides the opportunity"
+    ],
+    "sentence_max_words": 16,
+    "target_words": 28
+  }
+}
