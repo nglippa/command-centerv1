@@ -177,8 +177,11 @@ class LocalHTTP:
             raise ModelError(f"Model discovery returned HTTP {status}.")
         try:
             payload = json.loads(raw)
-            return [str(item["id"]) for item in payload["data"] if item.get("id")]
-        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            rows = payload.get("data") if isinstance(payload,dict) else None
+            if not isinstance(rows,list) or len(rows)>500 or any(not isinstance(item,dict) or not isinstance(item.get("id"),str) or not item["id"] for item in rows):
+                raise ValueError("Incomplete model listing")
+            return [item["id"] for item in rows]
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise ModelError("Model discovery returned malformed JSON.") from exc
 
     def complete(self, model: str, prompt: str, max_tokens: int, *, request_options: dict | None = None) -> tuple[str, str]:

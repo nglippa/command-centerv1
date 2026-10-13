@@ -1,5 +1,6 @@
 """Resolve operator links from registered loopback endpoints, never user URLs."""
 import ipaddress
+import hashlib
 from urllib.parse import quote, urlsplit
 
 
@@ -29,4 +30,6 @@ def model_access(entry):
     return {'kind': 'command_center_details', 'browser_url': None,
             'inspection_url': inspection,
             'details_url': '#/models/registered/' + quote(entry.identifier, safe=''),
+            'workspace_url': '#/models/' + hashlib.sha256(entry.endpoint.encode()).hexdigest()[:20] + '/' + quote(entry.identifier, safe=''),
+            'endpoint_workspace_url': '#/endpoints/' + hashlib.sha256(entry.endpoint.encode()).hexdigest()[:20],
             'endpoint_url': endpoint, 'reason': reason}

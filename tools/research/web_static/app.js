@@ -1,12 +1,15 @@
+import {makeWorkspaces} from "./workspaces.js";
 const NAV = [
   ["overview", "Overview"], ["jobs", "Jobs"], ["collaboration", "Collaboration"],
-  ["models", "Models"], ["results", "Results"], ["activity", "Activity"],
+  ["models", "Models"], ["endpoints", "Endpoints"], ["capabilities", "Skills & Tools"], ["results", "Results"], ["activity", "Activity"],
 ];
 
 const S = {
   bootstrap: null, state: null, route: {section: "overview"}, detail: null,
   detailKey: "", detailSignature: "", pollController: null, polling: false,
   loadingDetail: "", filterStates: {}, dirty: false, collabTab: "critique", filters: {}, connected: false,
+  capabilities: {page: null, detail: null, instructions: null, loading: false, error: "",
+    query: "", kind: "", availability: "", offset: 0, limit: 40, reload: false},
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -82,7 +85,9 @@ function section(title, body, action = null) {
 function routeFromHash() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(x=>{try{return decodeURIComponent(x);}catch{return x;}});
   const section = NAV.some(([key]) => key === parts[0]) ? parts[0] : "overview";
-  return {section, database: parts[1] || null, id: parts[2] || null};
+  if (section === "endpoints") return {section, database:null, id:parts[1]||null};
+  if (section === "capabilities") return {section, database: null, id: parts[1] || null};
+  return {section, database: parts[1] || null, id: parts[2] || null, session:parts[3]||null};
 }
 
 function recordHref(job) {
@@ -141,6 +146,7 @@ async function poll({manual = false} = {}) {
     updateConnection(); renderNav();
     const nextSignature = stateSignatureForRoute();
     if (isRecordRoute() && (manual || !S.detail || priorSignature !== nextSignature)) await loadDetail(true);
+    if(S.route.section==="models"&&S.route.id){await W.refreshMetadata();await W.refreshConversation();}
     if (!formIsActive()) render(); else refreshLivePanels();
   } catch (error) {
     if (error.name !== "AbortError") {
@@ -169,7 +175,8 @@ function renderNav() {
   const counts = S.state?.counts || {};
   const countFor = key => key === "jobs" ? (counts.pending || 0) + (counts.running || 0)
     : key === "results" ? (counts.completed || 0) + (counts.failed || 0) + (counts.rejected || 0) + (counts.abstained || 0)
-    : key === "models" ? (S.state?.models?.length || S.bootstrap?.models?.length || 0) : "";
+    : key === "models" ? (S.state?.models?.length || S.bootstrap?.models?.length || 0)
+    : key === "capabilities" ? (S.capabilities.page?.summary?.total || "") : "";
   const nav = $("#primary-nav"); nav.replaceChildren();
   const mobile = $("#mobile-nav"); mobile.replaceChildren();
   for (const [key, label] of NAV) {
@@ -179,12 +186,12 @@ function renderNav() {
     ]));
     mobile.append(h("option", {value: key, selected: active ? "selected" : null, text: label}));
   }
-  nav.append(h("a", {class:"nav-link",href:"#/jobs",title:"Open the durable job submission form"},[h("span",{text:"＋ New job"}),h("span",{class:"nav-count",text:"QUEUE"})]));
+  nav.append(h("a", {class:"nav-link",href:"#/jobs","data-action":"new-job",title:"Open the durable job submission form"},[h("span",{text:"New job"}),h("span",{class:"nav-count",text:"QUEUE"})]));
 }
 
 function renderHeader(title, eyebrow, meta = "") {
   $("#route-header").replaceChildren(h("div", {class: "route-heading"}, [
-    h("div", {}, [h("p", {class: "eyebrow", text: eyebrow}), h("h1", {text: title})]),
+    h("div", {}, [h("h1", {text: title})]),
     h("div", {class: "route-meta", text: meta}),
   ]));
 }
@@ -198,7 +205,7 @@ function render() {
   if (!S.bootstrap || !S.state) return;
   view.setAttribute("aria-busy", "false");
   const fn = {overview: renderOverview, jobs: renderJobs, collaboration: renderCollaboration,
-    models: renderModels, results: renderResults, activity: renderActivity}[S.route.section];
+    models: renderModels, endpoints: W.renderEndpoint, capabilities: renderCapabilities, results: renderResults, activity: renderActivity}[S.route.section];
   fn();
   restoreFilters();
 }
@@ -218,20 +225,25 @@ function jobTable(rows, {compact = false} = {}) {
       ...(compact ? [] : [h("td", {text: fmtDuration(row.duration_ms)}),h("td",{text:row.has_result?(row.kind==="collaboration"?"Accepted":"Response"):(row.kind==="collaboration"?"Evidence":"—")}), h("td", {class: "mono", text: row.database})]),
     ]));
   }
-  return h("div", {class: "table-wrap"}, h("table", {class: "data-table"}, [
+  return h("div", {class: "table-wrap",tabindex:"0",role:"region","aria-label":"Job records"}, h("table", {class: "data-table"}, [
     h("thead", {}, h("tr", {}, ["Name / ID","State","Kind","Model","Scheduled",...(compact ? [] : ["Duration","Artifact","Database"])].map(x => h("th", {text:x})))), body,
   ]));
 }
 
-function modelFor(identifier) {return (S.state?.models||[]).find(m=>m.identifier===identifier);}
+function modelFor(identifier) {
+  const configured=(S.state?.models||[]).find(m=>m.identifier===identifier);if(configured)return configured;
+  const job=(S.state?.jobs||[]).find(j=>j.model_identifier===identifier&&j.endpoint);
+  const endpoint=S.bootstrap?.endpoints?.find(e=>e.endpoint===job?.endpoint);
+  return endpoint?{identifier,access:{workspace_url:`#/models/${endpoint.id}/${encodeURIComponent(identifier)}`,endpoint_workspace_url:`#/endpoints/${endpoint.id}`,endpoint_url:endpoint.endpoint}}:null;
+}
 
 function modelActions(model, {selected=false}={}) {
   if(!model?.access)return null;
   const access=model.access;
   return h("div",{class:"actions model-actions"},[
-    !selected?h("a",{class:"button-link",href:access.browser_url||access.details_url,
-      ...(access.browser_url?{target:"_blank",rel:"noopener noreferrer"}:{}),title:access.reason,text:"Open Model"}):null,
-    access.endpoint_url?h("a",{class:"button-link quiet",href:access.inspection_url||access.endpoint_url,target:"_blank",rel:"noopener noreferrer",title:"Read-only model listing from the configured inference API; this is not a dashboard",text:"Open Endpoint"}):null,
+    !selected?h("a",{class:"button-link",href:access.workspace_url||access.details_url,
+      title:"Open a conversation with this exact selected model",text:"Open Model"}):null,
+    access.endpoint_url?h("a",{class:"button-link quiet",href:access.endpoint_workspace_url,title:"Open configured endpoint health, discovery and model interaction",text:"Open Endpoint"}):null,
   ]);
 }
 
@@ -597,6 +609,7 @@ function renderCollaborationDetail() {
 }
 
 function renderModels() {
+  if(S.route.id)return W.renderModel();
   const selected=S.route.id?modelFor(S.route.id):null;
   renderHeader(selected?"Model details":"Models", "Observed local resources", "Read-only; no start or stop controls");
   const rows=selected?[selected]:(S.state.models||[]);
@@ -615,6 +628,73 @@ function renderModels() {
   view.replaceChildren(...(selected?[h("a",{href:"#/models",class:"section-note",text:"← All models"})]:[]),content);
 }
 
+function capabilityList(values, emptyText = "None recorded") {
+  const items=(values||[]).filter(value=>value!==null&&value!==undefined&&String(value).trim());
+  return items.length?h("ul",{class:"capability-points"},items.map(value=>h("li",{text:typeof value==="string"?value:pretty(value)}))):h("p",{class:"hint",text:emptyText});
+}
+
+async function loadCapabilities({detail = true} = {}) {
+  const state=S.capabilities;if(state.loading){state.reload=true;return;}state.loading=true;state.error="";
+  try {
+    const params=new URLSearchParams({query:state.query,kind:state.kind,availability:state.availability,
+      offset:String(state.offset),limit:String(state.limit)});
+    state.page=await request(`/api/capabilities?${params}`);
+    if(detail&&S.route.section==="capabilities"&&S.route.id){
+      const value=await request(`/api/capabilities/${encodeURIComponent(S.route.id)}`);
+      if(S.route.section==="capabilities"&&S.route.id===value.capability.id)state.detail=value.capability;
+    } else if(!S.route.id) state.detail=null;
+  } catch(error) {state.error=error.message;}
+  finally {state.loading=false;if(S.route.section==="capabilities")render();renderNav();if(state.reload){state.reload=false;loadCapabilities();}}
+}
+
+function capabilityInspector(record) {
+  if(!record)return h("div",{class:"capability-inspector empty",text:"Select a capability to inspect its verified purpose, limits, and access policy."});
+  const callable=Boolean(record.callable),readable=Boolean(record.instruction_access);
+  const access=callable?"Bounded adapter enabled":readable?"Instructions readable; execution requires a separate authorized workflow":"Catalog information only";
+  const actions=[];
+  if(readable)actions.push(button(S.capabilities.instructions?"Reload instructions":"Read instructions","capability-instructions",{"data-id":record.id}));
+  if(S.capabilities.instructions)actions.push(button("Copy instructions","copy",{"data-copy":S.capabilities.instructions,class:"quiet"}));
+  const schemas=(record.mcp_tools||[]).map(tool=>({name:tool.name,description:tool.description||"",inputSchema:tool.inputSchema||null,
+    permitted:(record.permitted_operations||[]).includes(tool.name)}));
+  return h("article",{class:"capability-inspector"},[
+    h("div",{class:"record-head"},[h("div",{},[h("p",{class:"eyebrow",text:titleize(record.kind)}),h("h2",{class:"record-title",text:record.name}),h("p",{class:"mono muted",text:record.id})]),h("div",{class:"actions"},actions)]),
+    h("p",{class:"prose",text:record.description||"No bounded description was available."}),
+    h("div",{class:"capability-access"},[h("strong",{text:access}),h("p",{text:callable?"Only the displayed fixed operation and validated argument contract may execute. Model text never becomes a shell command or arbitrary URL.":"Reading guidance does not grant permission for side effects or make this capability model-callable."})]),
+    h("dl",{class:"keyvals"},[["Availability",record.availability],["Configuration",record.configuration_status],["Execution transport",record.execution_transport],...(record.configured_transport?[["Agent host transport",record.configured_transport]]:[]),...(record.configured_endpoint?[["Configured endpoint",record.configured_endpoint]]:[]),["Version / source",record.version_or_source],["Last verified",fmtDate(record.last_verified)]].flatMap(([key,value])=>[h("dt",{text:key}),h("dd",{text:value||"—"})])),
+    h("div",{class:"capability-detail-grid"},[
+      h("div",{},[h("h3",{text:"Use when"}),capabilityList(record.when_to_use),h("h3",{text:"Do not use when"}),capabilityList(record.when_not_to_use)]),
+      h("div",{},[h("h3",{text:record.kind==="MCP_SERVER"?"Runtime operations (permission required)":"Supported operations"}),capabilityList(record.supported_operations),h("h3",{text:"Dependencies & resources"}),capabilityList([...(record.required_dependencies||[]),...(record.resource_requirements||[])])]),
+      h("div",{},[h("h3",{text:"Security constraints"}),capabilityList(record.security_constraints),h("h3",{text:"Provenance requirements"}),capabilityList(record.provenance_requirements)]),
+    ]),
+    record.kind==="MCP_SERVER"?h("div",{class:"capability-contract"},[h("h3",{text:"MCP operation policy"}),h("p",{class:"hint",text:`Discovered schemas: ${schemas.length}. Permitted through Command Center: ${(record.permitted_operations||[]).join(", ")||"none"}. Discovery does not grant execution.`}),technicalDetails({permitted_operations:record.permitted_operations||[],discovered_tools:schemas})]):null,
+    record.invocation?technicalDetails({invocation:record.invocation,side_effects:record.side_effects,sources:record.source_paths||[],documentation_path:record.documentation_path,runtime_diagnostics:record.runtime_diagnostics}):technicalDetails({side_effects:record.side_effects,sources:record.source_paths||[],documentation_path:record.documentation_path}),
+    S.capabilities.instructions?h("section",{class:"instruction-reader"},[h("h3",{text:"Bounded skill instructions"}),h("p",{class:"hint",text:"Reference guidance only. Instructions are displayed as plain text and do not execute."}),h("pre",{class:"code-block",text:S.capabilities.instructions})]):null,
+  ]);
+}
+
+function renderCapabilities() {
+  const state=S.capabilities,page=state.page;
+  renderHeader("Skills & Tools","Capability catalog",page?`${page.total.toLocaleString()} matching · ${page.summary.total.toLocaleString()} inventoried`:"Read-only local inventory");
+  const search=h("input",{name:"query",type:"search",value:state.query,placeholder:"Search skills, tools or purpose",autocomplete:"off"});
+  const kind=h("select",{name:"kind"},[["","All kinds"],["SKILL","Skills"],["MCP_SERVER","MCP servers"],["CLI_TOOL","CLI tools"],["LOCAL_SERVICE","Local services"],["NATIVE_TOOL","Native adapters"],["WORKFLOW","Workflows"],["VALIDATOR","Validators"]].map(([value,label])=>h("option",{value,selected:state.kind===value?"selected":null,text:label})));
+  const availability=h("select",{name:"availability"},[["","All statuses"],["DISABLED","Disabled"],["CALLABLE","Callable adapter"],["READY","Ready"],["CONFIGURED","Configured"],["DISCOVERED","Discovered"],["UNVERIFIED","Unverified"],["UNAVAILABLE","Unavailable"]].map(([value,label])=>h("option",{value,selected:state.availability===value?"selected":null,text:label})));
+  const filter=h("form",{id:"capability-filter",class:"toolbar capability-filter"},[field("Search",search),field("Kind",kind),field("Availability",availability),h("button",{type:"submit",class:"primary",text:"Apply"})]);
+  let listBody;
+  if(state.error)listBody=h("div",{class:"error-state",text:state.error});
+  else if(!page)listBody=h("div",{class:"loading",text:"Loading the bounded local catalog…"});
+  else if(!page.items.length)listBody=h("div",{class:"empty",text:"No capabilities match these filters."});
+  else listBody=h("div",{class:"capability-list"},page.items.map(item=>h("a",{class:`capability-item${S.route.id===item.id?" active":""}`,href:`#/capabilities/${encodeURIComponent(item.id)}`},[
+    h("span",{class:"capability-item-head"},[h("strong",{text:item.name}),h("span",{class:"state",text:item.availability||"unknown"})]),
+    h("span",{class:"capability-kind",text:titleize(item.kind)}),h("span",{class:"capability-description",text:item.description}),
+    h("span",{class:"capability-access-label",text:item.callable?"Bounded adapter":item.instruction_access?"Readable guidance":"Inventory only"}),
+  ])));
+  const previous=page&&page.offset>0?button("Previous","capability-page",{"data-offset":Math.max(0,page.offset-page.limit)}):null;
+  const next=page&&page.offset+page.items.length<page.total?button("Next","capability-page",{"data-offset":page.offset+page.limit}):null;
+  const pages=h("div",{class:"capability-pages"},[previous,page?h("span",{text:page.total?`${page.offset+1}–${page.offset+page.items.length} of ${page.total}`:"0 results"}):null,next]);
+  const categories=h("div",{class:"catalog-categories","aria-label":"Quick capability filters"},[["","All",page?.summary.total],["SKILL","Skills",page?.summary.kinds.SKILL],["MCP_SERVER","MCP servers",page?.summary.kinds.MCP_SERVER]].map(([value,label,count])=>h("button",{type:"button",class:"catalog-category","data-action":"capability-kind","data-kind":value,"aria-pressed":String(state.kind===value)},[label,h("small",{text:count??"—"})])));
+  view.replaceChildren(categories,filter,h("div",{class:"capability-workspace"},[h("section",{class:"capability-results"},[listBody,pages]),capabilityInspector(state.detail)]));
+}
+
 function renderResults() {
   if(S.route.id)return renderRecord("result");
   renderHeader("Results", "Evidence library", "Completed and terminal records");
@@ -626,7 +706,7 @@ function renderResults() {
 function renderActivity() {
   renderHeader("Activity", "Persisted event chronology", "Latest 200 persisted or timestamp-derived events");
   const rows=[...(S.state.activity||[])].sort((a,b)=>new Date(b.at)-new Date(a.at));
-  view.replaceChildren(section("Recent operations",activityTimeline(rows)),technicalDetails({observed_at:S.state.observed_at,truncated:S.state.truncated}));
+  view.replaceChildren(section("Recent operations",h("div",{class:"activity-scroll",tabindex:"0",role:"region","aria-label":"Recorded activity"},activityTimeline(rows))),technicalDetails({observed_at:S.state.observed_at,truncated:S.state.truncated}));
 }
 
 function parseJSONField(form,name,fallback={}) {
@@ -677,6 +757,14 @@ async function copyText(value) {
   catch{const area=h("textarea",{class:"sr-only"});area.value=value;document.body.append(area);area.select();const ok=document.execCommand("copy");area.remove();setNotice(ok?"Copied to clipboard.":"Clipboard access failed; select and copy from the record.",ok?"":"error");}
 }
 
+async function loadCapabilityInstructions(identifier, control) {
+  control.disabled=true;
+  try {
+    const value=await request(`/api/capabilities/${encodeURIComponent(identifier)}/instructions`);
+    if(S.route.section==="capabilities"&&S.route.id===identifier){S.capabilities.instructions=value.content;renderCapabilities();}
+  } catch(error) {setNotice(error.message,"error");control.disabled=false;}
+}
+
 function applyExample(id) {
   const example=S.bootstrap.examples.find(x=>x.id===id);if(!example)return;
   const form=$("#collaboration-form"),spec=example.spec;form.elements.name.value=spec.name||"";form.elements.instruction.value=spec.instruction||"";form.elements.source.value=pretty(spec.source);form.elements.original.value=pretty(spec.original);form.elements.format.value=spec.format||"text";form.elements.semantic.value=String(spec.requires_semantic_verification!==false);form.elements.constraints.value=JSON.stringify(spec.constraints||{},null,2);form.elements.metrics.value=JSON.stringify(spec.metrics||{},null,2);for(const [key,value] of Object.entries(spec.limits||{})){if(form.elements[key])form.elements[key].value=value;}S.dirty=true;
@@ -690,25 +778,31 @@ document.addEventListener("change",event=>{
   if(event.target.dataset.action==="compare-select"){if(event.target.name==="compare-left")S.filters.compareLeft=event.target.value;else S.filters.compareRight=event.target.value;renderCollaborationDetail();}
   if(event.target.closest("[data-filter-scope]"))filterRows(event.target.closest("[data-filter-scope]").dataset.filterScope);
 });
-document.addEventListener("submit",event=>{event.preventDefault();if(event.target.id==="job-form")submitJob(event.target);if(event.target.id==="collaboration-form")submitCollaboration(event.target);});
+document.addEventListener("submit",event=>{event.preventDefault();if(event.target.id==="job-form")submitJob(event.target);if(event.target.id==="collaboration-form")submitCollaboration(event.target);if(event.target.id==="capability-filter"){const data=new FormData(event.target);S.capabilities.query=String(data.get("query")||"");S.capabilities.kind=String(data.get("kind")||"");S.capabilities.availability=String(data.get("availability")||"");S.capabilities.offset=0;S.capabilities.detail=null;S.capabilities.instructions=null;S.dirty=false;if(S.route.id)location.hash="#/capabilities";else loadCapabilities({detail:false});}});
 document.addEventListener("click",event=>{
   const target=event.target.closest("[data-action]");if(!target)return;const action=target.dataset.action;
-  if(action==="cancel-job")cancelRecord("research",target.dataset.db,target.dataset.id,target);
+  if(action==="new-job"){event.preventDefault();const focus=()=>{const form=$("#job-form");form?.scrollIntoView({block:"start",behavior:"auto"});form?.querySelector("select,input,textarea")?.focus({preventScroll:true});};if(S.route.section!=="jobs"){location.hash="#/jobs";requestAnimationFrame(()=>requestAnimationFrame(focus));}else focus();}
+  else if(action==="capability-kind"){S.capabilities.kind=target.dataset.kind||"";S.capabilities.query="";S.capabilities.offset=0;S.capabilities.detail=null;S.capabilities.instructions=null;S.dirty=false;if(S.route.id)location.hash="#/capabilities";else loadCapabilities({detail:false});}
+  else if(action==="cancel-job")cancelRecord("research",target.dataset.db,target.dataset.id,target);
   else if(action==="cancel-collaboration")cancelRecord("collaboration",target.dataset.db,target.dataset.id,target);
   else if(action==="refresh-detail")loadDetail(true);
   else if(action==="copy")copyText(target.dataset.copy||"");
+  else if(action==="capability-instructions")loadCapabilityInstructions(target.dataset.id,target);
+  else if(action==="capability-page"){S.capabilities.offset=Number(target.dataset.offset)||0;loadCapabilities({detail:false});}
   else if(action==="collab-tab"){S.collabTab=target.dataset.tab;renderCollaborationDetail();}
   else if(action==="clear-job"){target.closest("form").reset();S.dirty=false;}
   else if(action==="clear-collaboration"){target.closest("form").reset();S.dirty=false;}
 });
 
-window.addEventListener("hashchange",()=>{setNotice("");S.route=routeFromHash();S.detail=null;S.detailKey="";S.dirty=false;S.collabTab="critique";S.filters.compareLeft=null;S.filters.compareRight=null;renderNav();render();if(isRecordRoute())loadDetail();});
+const W=makeWorkspaces({h,view,field,button,request,renderHeader,stateBadge,fmtDate,fmtDuration,pretty,setNotice,recordHref,getState:()=>S});
+
+window.addEventListener("hashchange",()=>{W.reset();setNotice("");const priorCapability=S.route.section==="capabilities"?S.route.id:null;S.route=routeFromHash();S.detail=null;S.detailKey="";S.dirty=false;S.collabTab="critique";S.filters.compareLeft=null;S.filters.compareRight=null;if(priorCapability!==S.route.id){S.capabilities.instructions=null;S.capabilities.detail=null;}renderNav();render();if(isRecordRoute())loadDetail();if(S.route.section==="capabilities")loadCapabilities();if(S.route.section==="endpoints"||(S.route.section==="models"&&S.route.id))W.loadRoute();});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll();});
 
 async function start() {
   S.route=routeFromHash();renderNav();
   setInterval(async()=>{if(!S.bootstrap){try{await loadBootstrap();}catch{return;}}poll();},5000);
-  try{await loadBootstrap();await poll({manual:true});}
+  try{await loadBootstrap();await poll({manual:true});if(S.route.section==="capabilities")loadCapabilities();}
   catch(error){S.connected=false;updateConnection();renderError(`Unable to initialize Command Center: ${error.message}`);}
 }
 start();

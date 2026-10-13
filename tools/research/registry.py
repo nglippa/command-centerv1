@@ -168,4 +168,7 @@ class Registry:
             raise RegistryError("Discovered models may only clone at the configured endpoint.")
         value = configured.export()
         value["identifier"] = identifier
+        if identifier != configured.identifier:
+            value["expected_resources"] = {k:v for k,v in value["expected_resources"].items() if k not in ("weights_bytes","notes")}
+            value["expected_resources"]["notes"] = "Discovered installed model; weight size and memory requirements are unverified. Configured context/output limits still apply."
         return ModelEntry.from_dict(value)

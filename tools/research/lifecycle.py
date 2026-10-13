@@ -446,6 +446,11 @@ class Manager:
         if self.stopping(): raise LifecycleError("Stopped before inference.")
         self.store.transition(self._session,"BUSY")
         self._infer_started=self.d.monotonic()
+        from chat_stream import is_interactive_chat, run_chat
+        if is_interactive_chat(task):
+            db_path=getattr(self.d,"generation_db_path",None)
+            if not db_path: raise LifecycleError("Interactive chat generation store is not configured.")
+            return run_chat(e,task,db_path,self.stopping)
         request={"model":e.identifier,"messages":[{"role":"user","content":task["prompt"]}],"think":False,
                  "stream":False,"keep_alive":600,"options":{"num_ctx":e.context_window,
                  "num_predict":int(task.get("max_tokens",e.max_tokens))}}
@@ -569,6 +574,11 @@ class Manager:
         if self.stopping(): raise LifecycleError("Stopped before inference.")
         self.store.transition(self._session,"BUSY")
         self._infer_started=self.d.monotonic()
+        from chat_stream import is_interactive_chat, run_chat
+        if is_interactive_chat(task):
+            db_path=getattr(self.d,"generation_db_path",None)
+            if not db_path: raise LifecycleError("Interactive chat generation store is not configured.")
+            return run_chat(e,task,db_path,self.stopping)
         prior_options=getattr(self.d,"contract_request_options",None)
         if task.get("contract_json"):
             self.d.contract_request_options={"chat_template_kwargs":{"enable_thinking":False},"temperature":0}

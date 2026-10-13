@@ -15,8 +15,11 @@ import re
 import secrets
 import sqlite3
 import threading
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
+from chat_sessions import ModelWorkspaces, WorkspaceError
+from capabilities import read_skill
+from capability_run import CapabilityCatalog
 from collaboration_store import CollaborationStore
 from lifecycle import Manager
 from model_access import model_access
@@ -114,7 +117,7 @@ def session_view(row):
 
 class WebApplication:
     def __init__(self, db=DEFAULT_DB, config=DEFAULT_CONFIG, resources=DEFAULT_RESOURCES,
-                 history_db=DEFAULT_HISTORY, probe_enabled=True):
+                 history_db=DEFAULT_HISTORY, probe_enabled=True, capability_records=None):
         self.config = Path(config).resolve()
         self.resources = Path(resources).resolve()
         self.registry = Registry(self.config)
@@ -126,14 +129,65 @@ class WebApplication:
             pass
         with CollaborationStore(self.databases['research']):
             pass
+        self.workspaces = ModelWorkspaces(self.databases['research'], self.registry, self.resources)
         self.token = secrets.token_urlsafe(32)
         self._stop = threading.Event()
         self._observation_lock = threading.Lock()
         self._observation = {'observed_at': None, 'models': []}
+        self._capability_records = capability_records
+        self._capability_catalog = None
+        self._capability_lock = threading.Lock()
         self._thread = None
         if probe_enabled:
             self._thread = threading.Thread(target=self._observe, name='local-resource-observer', daemon=True)
             self._thread.start()
+
+    @property
+    def capability_catalog(self):
+        # Discovery is intentionally deferred: ordinary queue/status requests do
+        # not scan skill roots or probe read-only capability adapters.
+        if self._capability_catalog is None:
+            with self._capability_lock:
+                if self._capability_catalog is None:
+                    self._capability_catalog = CapabilityCatalog(
+                        self.resources, ROOT, records=self._capability_records)
+        return self._capability_catalog
+
+    def capabilities_page(self, values):
+        allowed = {'query', 'kind', 'availability', 'offset', 'limit'}
+        if set(values) - allowed or any(len(items) != 1 for items in values.values()):
+            raise APIError('Unsupported or repeated capability query parameter.')
+        query = values.get('query', [''])[0]
+        kind = values.get('kind', [''])[0]
+        availability = values.get('availability', [''])[0]
+        if kind not in ('', 'SKILL', 'MCP_SERVER', 'CLI_TOOL', 'LOCAL_SERVICE', 'NATIVE_TOOL', 'WORKFLOW', 'VALIDATOR'):
+            raise APIError('Unknown capability kind filter.')
+        if availability not in ('', 'CONFIGURED', 'DISCOVERED', 'READY', 'UNAVAILABLE', 'UNVERIFIED', 'CALLABLE', 'DISABLED'):
+            raise APIError('Unknown capability availability filter.')
+        try:
+            offset = int(values.get('offset', ['0'])[0])
+            limit = int(values.get('limit', ['60'])[0])
+        except ValueError:
+            raise APIError('Capability pagination must use integers.')
+        return self.capability_catalog.page(query=query, kind=kind, availability=availability,
+                                            offset=offset, limit=limit)
+
+    def capability_detail(self, identifier):
+        try:
+            return {'capability': self.capability_catalog.get(identifier)}
+        except ValueError:
+            raise APIError('Unknown capability ID.', 404)
+
+    def capability_instructions(self, identifier):
+        try:
+            record = self.capability_catalog.get(identifier)
+            if record.get('kind') != 'SKILL' or not record.get('instruction_access'):
+                raise APIError('Instructions are unavailable for this capability.', 404)
+            return read_skill(identifier, self.capability_catalog.records)
+        except APIError:
+            raise
+        except ValueError:
+            raise APIError('Instructions are unavailable for this capability.', 404)
 
     def close(self):
         self._stop.set()
@@ -195,6 +249,7 @@ class WebApplication:
                 'databases': [{'key': k, 'label': 'Research queue' if k == 'research' else 'Verified experiments',
                                'writable': k == 'research'} for k in self.databases],
                 'models': [{k: getattr(e, k) for k in MODEL_FIELDS} for e in self.registry.entries],
+                'endpoints': [{'id':key,'endpoint':entry.endpoint,'provider':entry.provider} for key,entry in self.workspaces.endpoints.items()],
                 'examples': examples}
 
     def _lifecycle(self):
@@ -237,7 +292,7 @@ class WebApplication:
                     total = db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
                     truncated |= total > MAX_RECORDS
                     # Read summaries, not full model responses, on the polling path.
-                    fields = ('id,name,model_identifier,model_family,state,created_at,scheduled_at,started_at,completed_at,'
+                    fields = ('id,name,model_identifier,model_family,endpoint,state,created_at,scheduled_at,started_at,completed_at,'
                               '(result IS NOT NULL) AS has_result' if kind == 'research' else
                               'id,state,created_at,scheduled_at,started_at,completed_at,cancel_requested,stop_reason,'
                               'accepted_revision_id,json_extract(spec_json,"$.name") AS name,'
@@ -581,13 +636,15 @@ class RequestHandler(BaseHTTPRequestHandler):
         try:
             self._guard(mutation)
             app = self.server.application
-            path = unquote(urlsplit(self.path).path)
+            target = urlsplit(self.path)
+            path = unquote(target.path)
             if any(part in ('.', '..') for part in path.split('/')) or '\\' in path:
                 raise APIError('Route not found.', 404)
             if not mutation:
                 static = {'/': ('index.html', 'text/html; charset=utf-8'),
                           '/static/app.js': ('app.js', 'text/javascript; charset=utf-8'),
-                          '/static/styles.css': ('styles.css', 'text/css; charset=utf-8')}
+                          '/static/styles.css': ('styles.css', 'text/css; charset=utf-8'),
+                          '/static/workspaces.js': ('workspaces.js', 'text/javascript; charset=utf-8')}
                 if path in static:
                     filename, mime = static[path]
                     return self.send_payload((HERE / 'web_static' / filename).read_bytes(), content_type=mime)
@@ -596,8 +653,29 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if path == '/api/bootstrap':
                     return self.send_payload(app.bootstrap(), extra={'Set-Cookie':
                         'cc_session=' + app.token + '; Path=/; HttpOnly; SameSite=Strict'})
+                endpoint = re.fullmatch(r'/api/endpoints/([a-f0-9]{20})',path)
+                conversation = re.fullmatch(r'/api/conversations/(chat-[a-f0-9-]{36})',path)
+                if endpoint:
+                    return self.send_payload(app.workspaces.endpoint(endpoint.group(1)))
+                if conversation:
+                    return self.send_payload(app.workspaces.conversation(conversation.group(1)))
+                if path == '/api/model-workspace':
+                    values=parse_qs(target.query,keep_blank_values=True,strict_parsing=True)
+                    if set(values)!={'endpoint','model'} or any(len(v)!=1 for v in values.values()):
+                        raise APIError('Specify one registered endpoint and selected model.')
+                    return self.send_payload(app.workspaces.workspace(values['endpoint'][0],values['model'][0]))
                 if path == '/api/state':
                     return self.send_payload(app.state())
+                if path == '/api/capabilities':
+                    values = (parse_qs(target.query, keep_blank_values=True, strict_parsing=True)
+                              if target.query else {})
+                    return self.send_payload(app.capabilities_page(values))
+                instructions = re.fullmatch(r'/api/capabilities/([^/]{1,200})/instructions', path)
+                capability = re.fullmatch(r'/api/capabilities/([^/]{1,200})', path)
+                if instructions:
+                    return self.send_payload(app.capability_instructions(instructions.group(1)))
+                if capability:
+                    return self.send_payload(app.capability_detail(capability.group(1)))
                 match = re.fullmatch(r'/api/(jobs|collaborations)/([a-z]+)/([^/]{1,160})', path)
                 export = re.fullmatch(r'/api/export/(research|collaboration)/([a-z]+)/([^/]{1,160})', path)
                 if match or export:
@@ -607,6 +685,23 @@ class RequestHandler(BaseHTTPRequestHandler):
                     return self.send_payload(data, extra={'Content-Disposition': f'attachment; filename="{filename}"'} if export else None)
             else:
                 payload = self._body()
+                endpoint = re.fullmatch(r'/api/endpoints/([a-f0-9]{20})/test',path)
+                turn = re.fullmatch(r'/api/conversations/(chat-[a-f0-9-]{36})/turns',path)
+                stop = re.fullmatch(r'/api/conversations/(chat-[a-f0-9-]{36})/cancel',path)
+                if endpoint:
+                    checked_object(payload,())
+                    return self.send_payload(app.workspaces.endpoint(endpoint.group(1),refresh=True))
+                if path == '/api/conversations':
+                    checked_object(payload,('endpoint_id','model_identifier'),('endpoint_id','model_identifier'))
+                    if not all(isinstance(v,str) for v in payload.values()):raise APIError('Endpoint and model identifiers must be text.')
+                    return self.send_payload(app.workspaces.create(payload['endpoint_id'],payload['model_identifier']),201)
+                if turn:
+                    checked_object(payload,('content','max_tokens'),('content',))
+                    return self.send_payload(app.workspaces.submit(turn.group(1),payload['content'],payload.get('max_tokens')),201)
+                if stop:
+                    checked_object(payload,('task_id',),('task_id',))
+                    if not isinstance(payload['task_id'],str):raise APIError('Task identifier must be text.')
+                    return self.send_payload(app.workspaces.cancel(stop.group(1),payload['task_id']))
                 if path == '/api/jobs':
                     return self.send_payload(app.submit_job(payload), 201)
                 if path == '/api/collaborations':
@@ -615,7 +710,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if match:
                     return self.send_payload(app.cancel(*match.groups(), payload))
             raise APIError('Route not found.', 404)
-        except APIError as exc:
+        except (APIError, WorkspaceError) as exc:
             self.send_payload({'error': str(exc)}, exc.status)
         except ValueError as exc:
             self.send_payload({'error': str(exc)}, 400)

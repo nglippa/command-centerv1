@@ -107,6 +107,7 @@ class QueueStore:
         task_id: str | None = None,
         registry_json: str | None = None,
         contract_json: str | None = None,
+        commit: bool = True,
     ) -> str:
         if not prompt.strip() or len(prompt) > 32_000:
             raise ValueError("Prompt must contain 1 to 32,000 characters.")
@@ -138,7 +139,8 @@ class QueueStore:
                 contract_json,
             ),
         )
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return task_id
 
     def claim_due(self, now: str | None = None) -> dict | None:
@@ -185,14 +187,20 @@ class QueueStore:
                         (session_id,error,task_id))
         self.db.commit()
 
-    def cancel(self, task_id: str) -> bool:
-        with self.transaction():
+    def cancel(self, task_id: str, *, commit: bool = True) -> bool:
+        def apply():
             changed = self.db.execute(
                 """UPDATE tasks SET state='cancelled',completed_at=?
                    WHERE id=? AND state='pending'""",
                 (utc_now(), task_id),
             ).rowcount
-        return changed == 1
+            return changed == 1
+        if not commit:
+            if not self.db.in_transaction:
+                raise ValueError("Uncommitted cancellation requires a caller transaction.")
+            return apply()
+        with self.transaction():
+            return apply()
 
     def recover_running(self) -> int:
         message = (

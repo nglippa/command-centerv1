@@ -15,6 +15,8 @@
     "research:compare": "python3 tools/research/cli.py compare",
     "research:collaborations": "python3 tools/research/cli.py collaborations",
     "research:cancel-collaboration": "python3 tools/research/cli.py cancel-collaboration",
-    "research:web": "python3 tools/research/web.py"
+    "research:web": "python3 tools/research/web.py",
+    "research:capabilities": "python3 tools/research/capability_run.py health",
+    "research:capability-run": "python3 tools/research/capability_run.py run"
   }
 }

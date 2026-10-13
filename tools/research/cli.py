@@ -9,6 +9,7 @@ import fcntl
 import os
 import re
 import signal
+import sqlite3
 import sys
 import time
 from datetime import datetime, timezone
@@ -29,6 +30,8 @@ from whodunnit_notice import print_notice
 from registry import Registry, RegistryError
 from collaboration_store import CollaborationStore
 from collaboration import CollaborationRunner, comparison_text
+from chat_stream import (cancellation_requested, ensure_generation, is_interactive_chat,
+                         mark_generation_cancelled, record_worker_feature)
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_CONFIG = HERE / "models.json"
@@ -109,7 +112,10 @@ def run_worker(db_path: str, *, once: bool = False, poll_seconds: float = 1.0,
     manager = None
     try:
         manager = Manager(resources_dir, registry_path, stopping=lambda:stopping)
+        manager.d.generation_db_path = str(Path(db_path).expanduser().resolve())
         with QueueStore(db_path) as store, CollaborationStore(db_path) as collaborations:
+            ensure_generation(store.db)
+            record_worker_feature(store.db, os.getpid(), manager.d.identity(os.getpid()))
             recovered = store.recover_running()
             if recovered:
                 print(f"Recovered {recovered} interrupted task(s) as failed.")
@@ -152,7 +158,20 @@ def run_worker(db_path: str, *, once: bool = False, poll_seconds: float = 1.0,
                                 # Persist before cleanup; SIGKILL during unload must not lose results.
                                 if not store.complete(task["id"],result,raw,sid):
                                     raise RuntimeError("Running task changed before completion.")
-                            outcome = manager.execute(task,on_result=save_result)
+                            chat = is_interactive_chat(task)
+                            prior_stopping = manager.stopping
+                            if chat:
+                                manager.stopping = lambda: prior_stopping() or cancellation_requested(db_path, task["id"])
+                            try:
+                                outcome = manager.execute(task,on_result=save_result)
+                            finally:
+                                manager.stopping = prior_stopping
+                            if chat and outcome.error:
+                                try:
+                                    if cancellation_requested(db_path, task["id"]):
+                                        mark_generation_cancelled(db_path, task["id"])
+                                except sqlite3.Error:
+                                    return 1
                             if outcome.error:
                                 if store.fail(task["id"],outcome.error,outcome.raw_json):
                                     print(f"Task {task['id']} failed: {display(outcome.error)}",file=sys.stderr)
